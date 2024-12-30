@@ -2,6 +2,7 @@ streamlit
 langchain
 langchain-community
 langchain-groq
+langchain-huggingface
 openai
 chromadb
 pypdf
@@ -9,3 +10,4 @@ python-dotenv
 tiktoken
 faiss-cpu
 groq
+sentence-transformers

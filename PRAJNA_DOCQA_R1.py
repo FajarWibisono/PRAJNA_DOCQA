@@ -10,6 +10,17 @@ import tempfile
 import os
 import logging
 
+st.markdown("""
+<style>
+.css-1rs6os.edgvbvh3 {visibility: hidden;}
+.css-1lsmgbg.egzxvld0 {visibility: hidden;}
+.css-14xtw13.e8zbici0 {display: none;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
 # Setup logging dengan format yang lebih detail
 logging.basicConfig(
     level=logging.INFO,

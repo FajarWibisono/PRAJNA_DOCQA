@@ -1,4 +1,5 @@
 ﻿import streamlit as st
+
 # 1. set_page_config HARUS setelah import streamlit tapi sebelum import lainnya
 st.set_page_config(
     page_title="Your App Title",
@@ -14,6 +15,8 @@ footer {visibility: hidden;}
 </style>
 """
 st.markdown(hide_menu, unsafe_allow_html=True)
+
+#3. import dependencies lainnya
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter

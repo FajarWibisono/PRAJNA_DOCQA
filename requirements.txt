@@ -1,8 +1,10 @@
 streamlit
 langchain
+langchain-groq
 openai
 chromadb
 pypdf
 python-dotenv
 tiktoken
 faiss-cpu
+groq

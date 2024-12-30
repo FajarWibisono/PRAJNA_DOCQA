@@ -1,4 +1,19 @@
 ﻿import streamlit as st
+# 1. set_page_config HARUS setelah import streamlit tapi sebelum import lainnya
+st.set_page_config(
+    page_title="Your App Title",
+    page_icon="🧊",
+    layout="wide"
+)
+
+# 2. Kode untuk menghilangkan menu
+hide_menu = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_menu, unsafe_allow_html=True)
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -9,29 +24,6 @@ from langchain.memory import ConversationBufferMemory
 import tempfile
 import os
 import logging
-
-# Menghilangkan menu hamburger dan 'Manage app' button
-hide_menu = """
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-</style>
-"""
-st.markdown(hide_menu, unsafe_allow_html=True)
-
-# Setup logging dengan format yang lebih detail
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-# Konfigurasi tampilan halaman
-st.set_page_config(
-    page_title="PRAJNA DOCQA",
-    page_icon="📖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS untuk tampilan yang lebih baik
 st.markdown("""

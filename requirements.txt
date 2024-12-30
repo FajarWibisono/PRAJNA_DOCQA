@@ -1,12 +1,13 @@
-DOCQA ---> requirements.txt
-streamlit==1.29.0
-langchain==0.1.0
-langchain-groq==0.1.0
-langchain-community==0.0.16
-langchain-huggingface==0.0.10
-faiss-cpu==1.7.4
-PyPDF2==3.0.1
-transformers==4.37.0
-sentence-transformers==2.2.2
-torch torchvision torchaudio
-langchain_groq import ChatGroq
+streamlit
+langchain
+langchain-community
+langchain-groq
+langchain-huggingface
+openai
+chromadb
+pypdf
+python-dotenv
+tiktoken
+faiss-cpu
+groq
+sentence-transformers

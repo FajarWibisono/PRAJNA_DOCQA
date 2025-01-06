@@ -53,7 +53,7 @@ def initialize_llm():
     """Inisialisasi model LLM dengan konfigurasi yang dioptimalkan"""
     try:
         model_config = {
-            "temperature": 0.4,  # Lebih rendah untuk jawaban yang lebih konsisten
+            "temperature": 0.3,  # Lebih rendah untuk jawaban yang lebih konsisten
             "max_tokens": 3600,  # Ditingkatkan untuk jawaban yang lebih lengkap
             "top_p": 0.9,  # Parameter tambahan untuk kualitas output
             "presence_penalty": 0.1,  # Mendorong variasi dalam respons

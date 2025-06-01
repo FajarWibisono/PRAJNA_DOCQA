@@ -53,7 +53,7 @@ def initialize_llm():
     """Inisialisasi model LLM dengan konfigurasi yang dioptimalkan"""
     try:
         model_config = {
-            "temperature": 0.3,  # Lebih rendah untuk jawaban yang lebih konsisten
+            "temperature": 0.27,  # Lebih rendah untuk jawaban yang lebih konsisten
             "max_tokens": 3600,  # Ditingkatkan untuk jawaban yang lebih lengkap
             "top_p": 0.9,  # Parameter tambahan untuk kualitas output
             "presence_penalty": 0.1,  # Mendorong variasi dalam respons
@@ -62,7 +62,7 @@ def initialize_llm():
         
         llm = ChatGroq(
             api_key=st.secrets["GROQ_API_KEY"],
-            model_name="mixtral-8x7b-32768",
+            model_name="gemma2-9b-it",
             **model_config
         )
         return llm

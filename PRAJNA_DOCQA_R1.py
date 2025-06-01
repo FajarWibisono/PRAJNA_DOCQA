@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 
 # 1. set_page_config HARUS setelah import streamlit tapi sebelum import lainnya
 st.set_page_config(
@@ -16,7 +16,13 @@ footer {visibility: hidden;}
 """
 st.markdown(hide_menu, unsafe_allow_html=True)
 
-#3. import dependencies lainnya
+# 3. Mengatasi konflik PyTorch dengan Streamlit
+import os
+os.environ["STREAMLIT_SERVER_WATCH_CHANGES"] = "false"
+
+# 4. import dependencies lainnya
+import tempfile
+import logging
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -24,30 +30,41 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-import tempfile
-import os
-import logging
+
+# Konfigurasi logging
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Custom CSS untuk tampilan yang lebih baik
 st.markdown("""
     <style>
     .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
+    max-width: 1200px;
+    margin: 0 auto;
     }
     .chat-message {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
     }
     .user-message {
-        background-color: #f0f2f6;
+    background-color: #f0f2f6;
     }
     .assistant-message {
-        background-color: #e8f0fe;
+    background-color: #e8f0fe;
     }
     </style>
 """, unsafe_allow_html=True)
+
+@st.cache_resource
+def load_embeddings():
+    """Load embeddings model with caching"""
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        model_kwargs={'device': 'cpu'}
+    )
 
 def initialize_llm():
     """Inisialisasi model LLM dengan konfigurasi yang dioptimalkan"""
@@ -59,7 +76,7 @@ def initialize_llm():
             "presence_penalty": 0.1,  # Mendorong variasi dalam respons
             "frequency_penalty": 0.1  # Mengurangi pengulangan
         }
-        
+
         llm = ChatGroq(
             api_key=st.secrets["GROQ_API_KEY"],
             model_name="gemma2-9b-it",
@@ -79,26 +96,39 @@ def process_documents(pdf_docs):
             length_function=len,
             separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]  # Separator yang lebih detail
         )
-        
+
         documents = []
+        temp_files = []
+
         for pdf in pdf_docs:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                temp_file.write(pdf.read())
-                loader = PyPDFLoader(temp_file.name)
-                documents.extend(loader.load())
-            os.unlink(temp_file.name)
-        
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    temp_file.write(pdf.read())
+                    temp_files.append(temp_file.name)
+                    loader = PyPDFLoader(temp_file.name)
+                    documents.extend(loader.load())
+            except Exception as pdf_error:
+                logging.error(f"Error processing PDF {pdf.name}: {pdf_error}")
+                continue
+
+        # Cleanup temp files
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+
+        if not documents:
+            raise ValueError("Tidak ada dokumen yang berhasil diproses")
+
         chunks = text_splitter.split_documents(documents)
-        
+
         # Menggunakan model embedding multibahasa yang lebih baik
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-            model_kwargs={'device': 'cpu'}
-        )
-        
+        embeddings = load_embeddings()
+
         vector_store = FAISS.from_documents(chunks, embeddings)
         return vector_store
-    
+
     except Exception as e:
         logging.error(f"Error in document processing: {e}")
         raise
@@ -107,13 +137,13 @@ def get_conversation_chain(vector_store):
     """Membuat rantai percakapan dengan konfigurasi yang dioptimalkan"""
     try:
         llm = initialize_llm()
-        
+
         memory = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True,
             output_key='answer'
         )
-        
+
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vector_store.as_retriever(
@@ -121,11 +151,11 @@ def get_conversation_chain(vector_store):
             ),
             memory=memory,
             return_source_documents=True,
-            verbose=True
+            verbose=False  # Ubah ke True hanya untuk debugging
         )
-        
+
         return conversation_chain
-    
+
     except Exception as e:
         logging.error(f"Error creating conversation chain: {e}")
         raise
@@ -153,12 +183,12 @@ def main():
             accept_multiple_files=True,
             help="Anda dapat mengunggah beberapa file PDF sekaligus"
         )
-        
+
         if st.button("🔄 Proses Dokumen", use_container_width=True):
             if not pdf_docs:
                 st.error("Silakan unggah dokumen terlebih dahulu!")
                 return
-                
+
             with st.spinner("📊 Memproses dokumen..."):
                 try:
                     st.session_state.vector_store = process_documents(pdf_docs)
@@ -195,22 +225,24 @@ def main():
                         "kecuali jika diminta dalam bahasa Inggris. Jawaban harus mencakup: "
                         f"{prompt}"
                     )
-                    
+
                     with st.spinner("🤔 Sedang berpikir..."):
                         response = st.session_state.conversation.invoke({"question": modified_prompt})
                         st.markdown(response["answer"])
                         st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
-                
+
                 except Exception as e:
-                    st.error("❌ Maaf, terjadi kesalahan dalam memproses pertanyaan Anda.")
+                    error_msg = f"❌ Maaf, terjadi kesalahan dalam memproses pertanyaan Anda: {str(e)}"
+                    st.error(error_msg)
                     logging.error(f"Error in chat response: {e}")
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
     # Footer dengan disclaimer yang lebih menarik
     st.markdown(
         """
         <div style='background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 2rem;'>
         <p style='font-size: 12px; color: #6c757d; margin: 0;'>
-        ⚠️ <strong>Disclaimer:</strong> AI-LLM dapat membuat kesalahan. 
+        ⚠️ <strong>Disclaimer:</strong> AI-LLM dapat membuat kesalahan.
         Mohon verifikasi informasi penting sebelum mengambil keputusan.
         </p>
         </div>

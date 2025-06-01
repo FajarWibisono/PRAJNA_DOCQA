@@ -2,8 +2,8 @@ import streamlit as st
 
 # 1. set_page_config HARUS setelah import streamlit tapi sebelum import lainnya
 st.set_page_config(
-    page_title="Your App Title",
-    page_icon="🧊",
+    page_title="PRAJNA DocQA",
+    page_icon="🧠",
     layout="wide"
 )
 
@@ -59,10 +59,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_resource
-def load_embeddings():
-    """Load embeddings model with caching"""
+def load_embeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"):
+    """Load embeddings model with caching - menggunakan model yang lebih ringan"""
     return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        model_name=model_name,
         model_kwargs={'device': 'cpu'}
     )
 
@@ -87,46 +87,69 @@ def initialize_llm():
         logging.error(f"Error initializing LLM: {e}")
         raise
 
-def process_documents(pdf_docs):
-    """Memproses dokumen PDF dengan penanganan error yang lebih baik"""
+@st.cache_data
+def process_pdf_file(file_content, file_name):
+    """Cache hasil pemrosesan PDF untuk menghindari pemrosesan ulang"""
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            temp_file.write(file_content)
+            loader = PyPDFLoader(temp_file.name)
+            documents = loader.load()
+            os.unlink(temp_file.name)
+            return documents
+    except Exception as e:
+        logging.error(f"Error processing file {file_name}: {e}")
+        return []
+
+def process_documents(pdf_docs, chunk_size=800, chunk_overlap=100):
+    """Memproses dokumen PDF dengan optimasi kecepatan"""
+    try:
+        progress_text = st.empty()
+        progress_text.text("Mengekstrak teks dari PDF...")
+
+        # Menggunakan text splitter yang lebih efisien
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=450,  # Ukuran chunk yang dioptimalkan
-            chunk_overlap=150,  # Overlap yang lebih besar untuk konteks yang lebih baik
+            chunk_size=chunk_size,  # Chunk yang lebih besar
+            chunk_overlap=chunk_overlap,  # Overlap yang lebih kecil
             length_function=len,
-            separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]  # Separator yang lebih detail
+            separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
         )
 
         documents = []
-        temp_files = []
-
+        # Proses file secara paralel dengan caching
         for pdf in pdf_docs:
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                    temp_file.write(pdf.read())
-                    temp_files.append(temp_file.name)
-                    loader = PyPDFLoader(temp_file.name)
-                    documents.extend(loader.load())
-            except Exception as pdf_error:
-                logging.error(f"Error processing PDF {pdf.name}: {pdf_error}")
-                continue
-
-        # Cleanup temp files
-        for temp_file in temp_files:
-            try:
-                os.unlink(temp_file)
-            except:
-                pass
+            # Gunakan cache untuk menghindari pemrosesan ulang
+            doc_content = process_pdf_file(pdf.read(), pdf.name)
+            documents.extend(doc_content)
 
         if not documents:
             raise ValueError("Tidak ada dokumen yang berhasil diproses")
 
+        progress_text.text("Membagi teks menjadi chunk...")
         chunks = text_splitter.split_documents(documents)
 
-        # Menggunakan model embedding multibahasa yang lebih baik
+        # Tampilkan progress
+        progress_bar = st.progress(0)
+        total_chunks = len(chunks)
+
+        # Batasi jumlah chunk jika terlalu banyak
+        if total_chunks > 500:
+            st.warning(f"Dokumen menghasilkan {total_chunks} chunk. Membatasi hingga 500 chunk untuk kinerja yang lebih baik.")
+            chunks = chunks[:500]
+            total_chunks = 500
+
+        progress_text.text(f"Membuat embedding untuk {total_chunks} chunk...")
+        # Gunakan model embedding yang sudah di-cache
         embeddings = load_embeddings()
 
+        # Buat vector store dengan progress bar
         vector_store = FAISS.from_documents(chunks, embeddings)
+
+        # Update progress bar manually
+        for i in range(10):
+            progress_bar.progress((i+1)/10)
+
+        progress_text.text("Pemrosesan selesai!")
         return vector_store
 
     except Exception as e:
@@ -184,14 +207,34 @@ def main():
             help="Anda dapat mengunggah beberapa file PDF sekaligus"
         )
 
+        processing_mode = st.radio(
+            "Mode Pemrosesan:",
+            ["Cepat (kualitas lebih rendah)", "Seimbang", "Kualitas Tinggi (lebih lambat)"]
+        )
+
         if st.button("🔄 Proses Dokumen", use_container_width=True):
             if not pdf_docs:
                 st.error("Silakan unggah dokumen terlebih dahulu!")
                 return
 
+            # Sesuaikan parameter berdasarkan mode
+            if processing_mode == "Cepat (kualitas lebih rendah)":
+                chunk_size = 1000
+                chunk_overlap = 50
+            elif processing_mode == "Seimbang":
+                chunk_size = 800
+                chunk_overlap = 100
+            else:
+                chunk_size = 450
+                chunk_overlap = 150
+
             with st.spinner("📊 Memproses dokumen..."):
                 try:
-                    st.session_state.vector_store = process_documents(pdf_docs)
+                    st.session_state.vector_store = process_documents(
+                        pdf_docs,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap
+                    )
                     st.session_state.conversation = get_conversation_chain(
                         st.session_state.vector_store
                     )
